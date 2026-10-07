@@ -2,8 +2,15 @@
 """Static implementation of the wYnFuscate `dC` string decoder found in the wrapper head."""
 
 import re
+from pathlib import Path
 
-SRC = open('/home/user/uploads/message.txt', 'r', encoding='utf-8').read()
+
+def read_source(path: Path) -> str:
+    return path.read_text(encoding='utf-8')
+
+
+_default_source = Path(__file__).resolve().with_name('message.txt')
+SRC = read_source(_default_source)
 
 def unescape(s):
     out = bytearray()

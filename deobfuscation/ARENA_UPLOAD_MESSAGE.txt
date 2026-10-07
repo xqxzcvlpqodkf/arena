@@ -1,0 +1,7 @@
+I attached an Arena reconstruction bundle produced by tools/deobfuscate.py.
+Extract it, read ARENA_TASK.md first, and reconstruct functionality-equivalent
+clean Luau. Original structure and names do not matter; observable functionality
+must match 1:1. Use the bundled sandbox/runtime evidence, continue dynamic callback
+tracing where needed, and do not stop at a UI-only or string-based reconstruction.
+Produce reconstructed.lua plus the behavior contract and differential results
+required by ARENA_TASK.md.

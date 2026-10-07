@@ -9,6 +9,8 @@ local G = getfenv(0)
 local H = {}          -- harness helpers handed to the chunk as upvalues
 local parts = {}      -- dump lines
 H.parts = parts
+H.callbacks = {}
+H.instances = {}
 
 local function __print(...)
     local n = select('#', ...)
@@ -41,6 +43,8 @@ makeFakeInstance = function(path)
     local mt = getmetatable(proxy)
     local store = {}
     local auto = {}
+    local record = { path = path, value = proxy, store = store, auto = auto }
+    H.instances[#H.instances + 1] = record
     mt.__index = function(_, k)
         if k == "GetService" then
             return function(_, svc)
@@ -49,12 +53,32 @@ makeFakeInstance = function(path)
                 if not services[svc] then services[svc] = makeFakeInstance("game." .. svc) end
                 return services[svc]
             end
+        elseif k == "Connect" then
+            return function(_, callback)
+                __print("[CALL]", path .. ":Connect", tostring(callback))
+                H.callbacks[#H.callbacks + 1] = {
+                    path = path .. ".Connect",
+                    fn = callback,
+                }
+                return makeFakeInstance(path .. ":Connect()")
+            end
         elseif k == "FindFirstChild" or k == "FindFirstChildOfClass" or k == "FindFirstChildWhichIsA" or k == "WaitForChild" then
-            return function(_, n2) __print("[CALL]", path .. ":" .. k, tostring(n2)) return nil end
+            return function(_, n2)
+                __print("[CALL]", path .. ":" .. k, tostring(n2))
+                return store[n2]
+            end
         elseif k == "GetChildren" or k == "GetDescendants" then
-            return function(_) __print("[CALL]", path .. ":" .. k) return {} end
+            return function(_)
+                __print("[CALL]", path .. ":" .. k)
+                return store[k] or {}
+            end
         elseif k == "IsA" then
-            return function(_, c) return c == "Instance" or c == "BasePart" or c == "LocalPlayer" end
+            return function(_, c)
+                local className = store.ClassName
+                return c == "Instance" or c == className
+                    or (c == "BasePart" and className == "Part")
+                    or (c == "LocalPlayer" and path == "game.Players.LocalPlayer")
+            end
         elseif k == "Clone" then
             return function(_) return makeFakeInstance(path .. ":Clone()") end
         elseif k == "Destroy" or k == "remove" then
@@ -86,6 +110,15 @@ makeFakeInstance = function(path)
     return proxy
 end
 
+H.makeFakeInstance = makeFakeInstance
+H.services = services
+H.findInstance = function(path)
+    for _, record in ipairs(H.instances) do
+        if record.path == path then return record.value, record.store end
+    end
+    return nil
+end
+
 local fakeGame = makeFakeInstance("game")
 local fakeWorkspace = makeFakeInstance("workspace")
 local fakeScript = makeFakeInstance("script")
@@ -115,7 +148,7 @@ end
 
 local function runSpawned(f, tag, a1, a2, a3)
     if type(f) ~= "function" then __print("[ENV]", tag, "non-function arg:", tostring(f)) return end
-    local ok, err = coroutine.wrap(f)(a1, a2, a3)
+    local ok, err = pcall(f, a1, a2, a3)
     if not ok then __print("[ENV]", tag, "error:", tostring(err)) end
 end
 
@@ -193,24 +226,72 @@ rawset(G, "shared", {})
 rawset(G, "settings", function() return makeFakeInstance("settings()") end)
 rawset(G, "UserSettings", function() return makeFakeInstance("UserSettings()") end)
 rawset(G, "Tick", function() return os.clock() end)
+rawset(G, "tick", function() return os.clock() end)
 rawset(G, "time", function() return os.time() end)
 rawset(G, "elapsedTime", function() return os.clock() end)
 rawset(G, "stats", function() return makeFakeInstance("stats()") end)
 rawset(G, "Version", function() return "0.900.1" end)
-rawset(G, "UDim2", { new = function(...) return setmetatable({}, { __tostring = function() return "UDim2" end }) end })
-rawset(G, "UDim", { new = function(...) return setmetatable({}, { __tostring = function() return "UDim" end }) end })
-rawset(G, "Vector2", { new = function(a, b) return { X = a or 0, Y = b or 0 } end })
-rawset(G, "Vector2int16", { new = function(a, b) return { X = a or 0, Y = b or 0 } end })
-rawset(G, "Vector3", { new = function(a, b, c) return { X = a or 0, Y = b or 0, Z = c or 0 } end })
-rawset(G, "Vector3int16", { new = function(a, b, c) return { X = a or 0, Y = b or 0, Z = c or 0 } end })
-rawset(G, "Region3int16", { new = function(...) return setmetatable({}, { __tostring = function() return "Region3int16" end }) end })
-rawset(G, "RotationCurveKey", { new = function(...) return setmetatable({}, { __tostring = function() return "RotationCurveKey" end }) end })
-rawset(G, "FloatCurveKey", { new = function(...) return setmetatable({}, { __tostring = function() return "FloatCurveKey" end }) end })
-rawset(G, "SharedTable", { new = function(...) return setmetatable({}, { __tostring = function() return "SharedTable" end }) end })
-rawset(G, "CFrame", { new = function(...) return setmetatable({}, { __tostring = function() return "CFrame" end }) end })
-rawset(G, "Color3", { new = function(...) return setmetatable({}, { __tostring = function() return "Color3" end }) end })
-rawset(G, "ColorSequence", { new = function(...) return setmetatable({}, { __tostring = function() return "ColorSequence" end }) end })
-rawset(G, "NumberSequence", { new = function(...) return setmetatable({}, { __tostring = function() return "NumberSequence" end }) end })
+local function makeValue(label, ...)
+    local values = table.pack(...)
+    local value = {
+        __valueLabel = label,
+        __valueArgs = values,
+        X = values[1],
+        Y = values[2],
+        Z = values[3],
+    }
+    local function binary(op, a, b)
+        return makeValue("(" .. tostring(a) .. " " .. op .. " " .. tostring(b) .. ")")
+    end
+    return setmetatable(value, {
+        __tostring = function()
+            local out = {}
+            for i = 1, values.n do out[i] = tostring(values[i]) end
+            return label .. "(" .. table.concat(out, ", ") .. ")"
+        end,
+        __add = function(a, b) return binary("+", a, b) end,
+        __sub = function(a, b) return binary("-", a, b) end,
+        __mul = function(a, b) return binary("*", a, b) end,
+        __div = function(a, b) return binary("/", a, b) end,
+        __unm = function(a) return makeValue("(-" .. tostring(a) .. ")") end,
+    })
+end
+H.makeValue = makeValue
+
+local function constructor(label)
+    return function(...) return makeValue(label, ...) end
+end
+rawset(G, "UDim2", { new = constructor("UDim2.new") })
+rawset(G, "UDim", { new = constructor("UDim.new") })
+rawset(G, "Vector2", { new = constructor("Vector2.new") })
+rawset(G, "Vector2int16", { new = constructor("Vector2int16.new") })
+rawset(G, "Vector3", { new = constructor("Vector3.new") })
+rawset(G, "Vector3int16", { new = constructor("Vector3int16.new") })
+rawset(G, "Region3int16", { new = constructor("Region3int16.new") })
+rawset(G, "RotationCurveKey", { new = constructor("RotationCurveKey.new") })
+rawset(G, "FloatCurveKey", { new = constructor("FloatCurveKey.new") })
+rawset(G, "SharedTable", { new = constructor("SharedTable.new") })
+rawset(G, "CFrame", {
+    new = constructor("CFrame.new"),
+    Angles = constructor("CFrame.Angles"),
+})
+rawset(G, "Color3", {
+    new = constructor("Color3.new"),
+    fromRGB = constructor("Color3.fromRGB"),
+})
+rawset(G, "ColorSequence", { new = constructor("ColorSequence.new") })
+rawset(G, "NumberSequence", { new = constructor("NumberSequence.new") })
+rawset(G, "TweenInfo", { new = constructor("TweenInfo.new") })
+local enumRoot = setmetatable({}, { __index = function(root, category)
+    local enumCategory = setmetatable({}, { __index = function(items, item)
+        local value = "Enum." .. tostring(category) .. "." .. tostring(item)
+        rawset(items, item, value)
+        return value
+    end })
+    rawset(root, category, enumCategory)
+    return enumCategory
+end })
+rawset(G, "Enum", enumRoot)
 rawset(G, "getgenv", function() return GENV end)
 rawset(G, "getsenv", function() return G end)
 rawset(G, "writefile", function(p, d) __print("[ENV]", "writefile", tostring(p), tostring(d)) end)
