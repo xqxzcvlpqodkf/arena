@@ -1,0 +1,20 @@
+[INVOKE] main InputBegan	true
+[TWEEN-INFO]	0.15
+[TWEEN-GOAL]	BackgroundColor3	Color3.fromRGB(16,16,22)
+[TWEEN-INFO]	0.15
+[TWEEN-GOAL]	Color	Color3.fromRGB(45,45,65)
+[TWEEN-INFO]	0.15
+[TWEEN-GOAL]	TextColor3	Color3.fromRGB(160,165,200)
+[SET]	Instance.new(TextLabel).Text	=	OFF
+[SET]	Instance.new(TextLabel).TextColor3	=	Color3.fromRGB(90,90,115)
+[INVOKE] main InputEnded	true
+[INVOKE] main InputBegan second	true
+[TWEEN-INFO]	0.15
+[TWEEN-GOAL]	BackgroundColor3	Color3.fromRGB(40,40,62)
+[TWEEN-INFO]	0.15
+[TWEEN-GOAL]	Color	Color3.fromRGB(100,100,220)
+[TWEEN-INFO]	0.15
+[TWEEN-GOAL]	TextColor3	Color3.fromRGB(210,215,255)
+[SET]	Instance.new(TextLabel).Text	=	ON
+[SET]	Instance.new(TextLabel).TextColor3	=	Color3.fromRGB(100,210,100)
+[INVOKE] main InputEnded second	true

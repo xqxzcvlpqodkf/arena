@@ -1,0 +1,60 @@
+[INVOKE] main InputBegan	true
+[SET]	Instance.new(TextLabel).Text	=	OFF
+[SET]	Instance.new(TextLabel).TextColor3	=	nil
+[INVOKE] main InputEnded	true
+[INVOKE] main InputBegan second	true
+[SET]	Instance.new(TextLabel).Text	=	ON
+[SET]	Instance.new(TextLabel).TextColor3	=	nil
+[INVOKE] main InputEnded second	true
+[STRING-FIND]	rbxassetid://10503381238 | 10503381238 | 1 | true
+[ENV]	task.delay	0.3	deferred
+[INVOKE] animation callback	15	true
+[TASKS]	delayed	1	spawned	0
+[ENV]	tick
+[ENV]	tick
+[ENV]	task.spawn	deferred
+[ENV]	task.spawn	deferred
+[INVOKE] delayed 1	true
+[TASKS-AFTER]	delayed	1	spawned	2
+[CALL]	workspace:GetDescendants
+[CALL]	Enemy:FindFirstChild	HumanoidRootPart
+[CALL]	Enemy:FindFirstChild	HumanoidRootPart
+[SET]	game.Players.LocalPlayer.Character.Humanoid.WalkSpeed	=	0
+[SET]	game.Players.LocalPlayer.Character.Humanoid.JumpPower	=	0
+[SET]	game.Players.LocalPlayer.Character.Humanoid.PlatformStand	=	true
+[SET]	game.Players.LocalPlayer.Character.Humanoid.AutoRotate	=	false
+[SET]	game.Players.LocalPlayer.Character.HumanoidRootPart.Velocity	=	table: 0x000055aa6e22e530
+[SET]	game.Players.LocalPlayer.Character.HumanoidRootPart.RotVelocity	=	table: 0x000055aa6e22d540
+[CALL]	game.Players.LocalPlayer.Character:GetDescendants
+[CALL]	game.RunService.Heartbeat.Connect()	(game.RunService.Heartbeat, function: 0x000055aa6e0f9aa0)
+[STRING-FIND]	game.RunService.Heartbeat.Connect | FireServer | 1 | true
+[CALL]	game.Players.LocalPlayer.Character:FindFirstChild	Communicate
+[CALL]	game.Players.LocalPlayer.Character.Communicate.FireServer()	(game.Players.LocalPlayer.Character.Communicate, table: 0x000055aa6e736420)
+[STRING-FIND]	game.Players.LocalPlayer.Character.Communicate.FireServer | FireServer | 1 | true
+[REMOTE-ARG]	Dash	Enum.KeyCode.W
+[REMOTE-ARG]	Key	Enum.KeyCode.Q
+[REMOTE-ARG]	Goal	KeyPress
+[CALL]	game.Players.LocalPlayer.Character:GetDescendants
+[CALL]	game.Players.LocalPlayer.Character:FindFirstChild	Communicate
+[CALL]	game.Players.LocalPlayer.Character.Communicate.FireServer()	(game.Players.LocalPlayer.Character.Communicate, table: 0x000055aa6e74cff0)
+[STRING-FIND]	game.Players.LocalPlayer.Character.Communicate.FireServer | FireServer | 1 | true
+[REMOTE-ARG]	Goal	delete bv
+[ENV]	task.wait	0.2
+[CALL]	game.Players.LocalPlayer.Character.Humanoid.ChangeState()	(game.Players.LocalPlayer.Character.Humanoid, Enum.HumanoidStateType.Physics)
+[STRING-FIND]	game.Players.LocalPlayer.Character.Humanoid.ChangeState | FireServer | 1 | true
+[SET]	game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame	=	(LocalRoot.CFrame * CFrame.Angles(1.0471975511965976,0,0))
+[ENV]	task.wait	0.12
+[CALL]	game.Players.LocalPlayer.Character.Humanoid.ChangeState()	(game.Players.LocalPlayer.Character.Humanoid, Enum.HumanoidStateType.GettingUp)
+[STRING-FIND]	game.Players.LocalPlayer.Character.Humanoid.ChangeState | FireServer | 1 | true
+[SET]	game.Players.LocalPlayer.Character.Humanoid.WalkSpeed	=	game.Players.LocalPlayer.Character.Humanoid.WalkSpeed
+[SET]	game.Players.LocalPlayer.Character.Humanoid.JumpPower	=	game.Players.LocalPlayer.Character.Humanoid.JumpPower
+[SET]	game.Players.LocalPlayer.Character.Humanoid.PlatformStand	=	game.Players.LocalPlayer.Character.Humanoid.PlatformStand
+[SET]	game.Players.LocalPlayer.Character.Humanoid.AutoRotate	=	game.Players.LocalPlayer.Character.Humanoid.AutoRotate
+[SET]	game.Players.LocalPlayer.Character.HumanoidRootPart.Velocity	=	table: 0x000055aa6e75c0e0
+[SET]	game.Players.LocalPlayer.Character.HumanoidRootPart.RotVelocity	=	table: 0x000055aa6e762950
+[INVOKE] spawned	1	true
+[ENV]	task.wait	1
+[ENV]	task.wait	1
+[ENV]	task.wait	1
+[ENV]	task.wait	1
+[INVOKE] spawned	2	true

@@ -1,16 +1,34 @@
 #!/usr/bin/env python3
-"""Build run.luau: fake-env prelude + instrumented beautified payload + trailer."""
-import re, sys
+"""Build an instrumented Luau VM dumper for the supported wYnFuscate profile."""
+import argparse
+import re
+import sys
+from pathlib import Path
 
-WORK = '/home/user/work'
+WORK = Path(__file__).resolve().parent
 
-prelude = open(f'{WORK}/env_prelude.lua').read()
+_parser = argparse.ArgumentParser()
+_parser.add_argument(
+    "--source",
+    type=Path,
+    default=WORK / "beautified.lua",
+    help="beautified protected Luau input (default: beautified.lua)",
+)
+_parser.add_argument(
+    "--output",
+    type=Path,
+    default=WORK / "run.txt",
+    help="instrumented Luau output (default: run.txt)",
+)
+_args = _parser.parse_args()
+
+prelude = (WORK / 'env_prelude.lua').read_text()
 # fix the broken trailing print of the prelude
 prelude = prelude.replace(
     '__print("[HARNESS] environment ready (" .. #CLIENV.string and "string" .. ")")',
     '__print("[HARNESS] environment ready")')
 
-payload = open(f'{WORK}/beautified.lua').read()
+payload = _args.source.read_text(encoding="utf-8", errors="replace")
 # line 1 contains the license comment AND the IIFE opener glued at the end
 lines = payload.split('\n')
 first = lines[0]
@@ -54,7 +72,9 @@ for pat, tag in CKPTS:
 
 # --- fine checkpoints by line number in beautified.lua ---
 import subprocess, tempfile, os
-FINE = list(range(1525, 1556))
+# These line-by-line checkpoints were useful while locating an integrity trap,
+# but they perturb debug-line checks and are no longer needed for a clean dump.
+FINE = []
 _plines = payload.split('\n')
 ok_lines = []
 for ln in FINE:
@@ -107,10 +127,11 @@ payload = re.sub(r'dr = 0\s*dI = 1\s*return',
                  'dr = 0 dI = 1 __print("[TRAP] dr-zeroed kill switch") return', payload)
 inj.append(f'dr-zero({n_dr})')
 
-# 7. NR hang loops -> error (all of them)
+# 7. NR hang loops are deliberate integrity traps. Skipping the loop body is
+# enough; raising here prevents the prototype table from being completed.
 n_nr = len(re.findall(r'repeat\s*NR = \( NR \* 1103515245 \+ 12345 \) % AT\s*until\s*NR == 0', payload))
 payload = re.sub(r'repeat\s*NR = \( NR \* 1103515245 \+ 12345 \) % AT\s*until\s*NR == 0',
-                 '__print("[TRAP] NR loop") error("NR-TRAP")', payload)
+                 '__print("[BYPASS] NR loop")', payload)
 inj.append(f'NR-loops({n_nr})')
 
 # 8. the infinite md loops at 1103515245 elsewhere (md==0) - neutralize all remaining
@@ -146,7 +167,7 @@ _i = _hits[0]
 _w = _i + 1
 assert 'while zx > 0 or zC > 0 do' in _lines[_w], 'T7 while not on next line: ' + _lines[_w][:80]
 _lines[_w] = _lines[_w].replace('while zx > 0 or zC > 0 do',
-    'local __t7n = 0 __print([[T7enter]] , zx , zC) while zx > 0 or zC > 0 do __t7n = __t7n + 1 if __t7n > 300 then __print([[T7STUCK]] , zx , zC , zE , ze , T4[dQ[22542]] , T4[dQ[50286]] , (zO and zO[T4[dQ[22542]]]) , (zO and zO[T4[dQ[50286]]]) ) do local __pk , __pv = next ( zO ) local __cnt = 0 while __pk ~= nil and __cnt < 500 do __cnt = __cnt + 1 __print([[T8E]] , __cnt , tostring ( __pk ) , tostring ( __pv ) ) __pk , __pv = next ( zO , __pk ) end end error([[T7-STUCK]]) end', 1)
+    'local __t7n = 0 while zx > 0 or zC > 0 do __t7n = __t7n + 1 if __t7n > 300 then __print([[T7STUCK]] , zx , zC , zE , ze , T4[dQ[22542]] , T4[dQ[50286]] , (zO and zO[T4[dQ[22542]]]) , (zO and zO[T4[dQ[50286]]]) ) do local __pk , __pv = next ( zO ) local __cnt = 0 while __pk ~= nil and __cnt < 500 do __cnt = __cnt + 1 __print([[T8E]] , __cnt , tostring ( __pk ) , tostring ( __pv ) ) __pk , __pv = next ( zO , __pk ) end end error([[T7-STUCK]]) end', 1)
 payload = '\n'.join(_lines)
 inj.append('t7-detector')
 
@@ -235,8 +256,46 @@ assert payload.count('local T2 = { } ;') == 1, 'T2 init hits %d' % payload.count
 payload = payload.replace('local T2 = { } ;', 'local T2 = { } ; local T2mt = { __newindex = function ( t , k , v ) if k == 59 then __print([[T2-59-SET]] , tostring ( v ) , [[L]] , tostring ( __dbginfo ( 2 , [[l]] ) ) ) end rawset ( t , k , v ) end } setmetatable ( T2 , T2mt ) ;', 1)
 inj.append('t2-59-watch')
 
+# Decoder and page-loader integrity checks compare closures by identity. The
+# dump harness intentionally wraps/instruments those closures, so bypass only
+# these four identity checks while retaining all actual decoding logic.
+for slot, index in ((62450, 1), (33346, 2), (16052, 3)):
+    needle = f'if T4 [ dQ [ {slot} ] ] ~= ( Rg and Rg [ {index} ] ) then'
+    assert payload.count(needle) == 1, (slot, payload.count(needle))
+    payload = payload.replace(needle, 'if false then', 1)
+
+needle = 'if T4 [ dQ [ 56219 ] ] ~= T4 [ dQ [ 45529 ] ] [ 4 ] then'
+assert payload.count(needle) == 1, payload.count(needle)
+payload = payload.replace(needle, 'if false then', 1)
+
+# Decoding later root pages invokes the destructive post-run cleanup as a trap.
+needle = 'if mb [ 1811 ] == 0 and mh > 0 and not mb [ 5966 ] then\n                                                                              T4 [ dQ [ dn [ 35114 ] ] ] ( )'
+assert payload.count(needle) == 1, payload.count(needle)
+payload = payload.replace(
+    needle,
+    'if mb [ 1811 ] == 0 and mh > 0 and not mb [ 5966 ] then\n'
+    '                                                                              __print([[BYPASS main-page cleanup]])',
+    1,
+)
+
+# After the protected wrapper clears globals, use raw references captured by
+# the harness instead of a metatable-sensitive lookup.
+needle = 'local nk = T4 [ dQ [ 45204 ] ] return nk and nk [ ng ]'
+assert payload.count(needle) == 1, payload.count(needle)
+payload = payload.replace(
+    needle,
+    'local __dk = __safe_rawget ( dQ , 45204 ) local nk = __safe_rawget ( T4 , __dk ) '
+    '__fallback_n = __fallback_n + 1 if __fallback_n < 20 then '
+    '__print([[FALLBACK]] , tostring(ng), tostring(__dk), type(nk), tostring(nk)) end '
+    'return nk and nk [ ng ]',
+    1,
+)
+
 # 10. THE BIG ONE: replace launch with pre-dump + run + post-dump
 BIGDUMP = r'''
+local table, string, math = __safe_table, __safe_string, __safe_math
+local pairs, ipairs, type = __safe_pairs, __safe_ipairs, __safe_type
+local tostring, pcall, rawget = __safe_tostring, __safe_pcall, __safe_rawget
 __emit("=== PREDUMP v1 ===")
 __print("[DUMP] pre-dump starting")
 do
@@ -251,8 +310,10 @@ do
   for _, k in ipairs(keys) do
     local v = D[k]
     local t = type(v)
-    if t == "number" or t == "boolean" then
+    if t == "number" then
       __emit("T4[" .. tostring(k) .. "] " .. t .. " " .. string.format("%.17g", v))
+    elseif t == "boolean" then
+      __emit("T4[" .. tostring(k) .. "] " .. t .. " " .. tostring(v))
     elseif t == "string" then
       __emit("T4[" .. tostring(k) .. "] string " .. tostring(v))
     elseif t == "table" then
@@ -360,7 +421,9 @@ do
   end
   __emit("=== END PREDUMP ===")
 end
-local __ok, __r1, __r2, __r3, __r4, __r5, __r6, __r7, __r8 = pcall(UT, ...)
+-- Prototype extraction does not need to execute the Roblox payload. Keeping
+-- it dormant also prevents the deliberate root decoy loop from running.
+local __ok, __r1, __r2, __r3, __r4, __r5, __r6, __r7, __r8 = true, nil, nil, nil, nil, nil, nil, nil, nil
 if not __ok then __print("[DUMP] payload error: ", __r1) end
 __emit("=== POSTDUMP v1 ===")
 do
@@ -379,6 +442,10 @@ do
     end
     local function dumpArr(tag, t, n)
       if t == nil then return end
+      if n == nil then
+        n = 0
+        for k in pairs(t) do if type(k) == "number" and k > n then n = k end end
+      end
       local parts = {}
       for i = 1, n do
         local v = t[i]
@@ -406,11 +473,17 @@ do
     table.sort(ik)
     local out = {}
     for _, id in ipairs(ik) do
-      local ok2, s = pcall(function() return z5[id] end)
-      if ok2 and s ~= nil and type(s) == "string" then
+      local ok2, sv = pcall(function()
+        local decoder = T4[dQ[62450]]
+        if decoder(id, zs) then return Ry end
+        return nil
+      end)
+      if ok2 and sv ~= nil and type(sv) == "string" then
         local hex = {}
-        for i = 1, #s do hex[i] = string.format("%02x", string.byte(s, i)) end
-        out[#out+1] = id .. "=" .. #s .. ":" .. table.concat(hex)
+        for j = 1, #sv do hex[j] = string.format("%02x", string.byte(sv, j)) end
+        out[#out+1] = id .. "=" .. #sv .. ":" .. table.concat(hex)
+      else
+        out[#out+1] = id .. "=!" .. tostring(sv)
       end
     end
     __emit("Z5POST " .. table.concat(out, " "))
@@ -433,10 +506,18 @@ for i = 1, #parts do print(parts[i]) end
 __print("=== DUMPFILE END ===")
 '''
 
+safe_bindings = '''
+local __safe_table, __safe_string, __safe_math = table, string, math
+local __safe_pairs, __safe_ipairs, __safe_type = pairs, ipairs, type
+local __safe_tostring, __safe_pcall, __safe_rawget = tostring, pcall, rawget
+local __fallback_n = 0
+'''
 run = (prelude
+       + safe_bindings
        + "\nlocal __print, __emit, __dbginfo = H.print, H.emit, H.debuginfo\n"
        + payload
        + "\n" + trailer)
 
-open(f'{WORK}/run.luau', 'w').write(run)
-print("[OK] built run.luau", len(run), "bytes; injections:", inj)
+_args.output.parent.mkdir(parents=True, exist_ok=True)
+_args.output.write_text(run)
+print(f"[OK] built {_args.output}", len(run), "bytes; injections:", inj)
